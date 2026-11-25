@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Jarvis 2.0</title>
+<style>
+:root{
+  --bg:#0f1720; --panel:#16212d; --line:#243445; --text:#e8eef4; --muted:#8798a9;
+  --accent:#7fb4e6; --me:#1d3247; --radius:14px;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme:light){
+  :root{--bg:#f3f6f9;--panel:#fff;--line:#dbe3ea;--text:#15202b;--muted:#617182;--accent:#2a6fb0;--me:#e1edf7;color-scheme:light}
+}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font:16px/1.55 "Avenir Next",system-ui,-apple-system,"Segoe UI",sans-serif;
+  padding-top:env(safe-area-inset-top,0);padding-bottom:env(safe-area-inset-bottom,0)}
+.app{height:100%;display:grid;grid-template-columns:300px 1fr;max-width:1100px;margin:0 auto}
+aside{background:var(--panel);border-right:1px solid var(--line);padding:20px;display:flex;flex-direction:column;gap:14px;overflow:auto}
+main{display:flex;flex-direction:column;min-width:0;height:100%}
+header{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line)}
+.orb{width:28px;height:28px;border-radius:50%;border:2px solid var(--accent);position:relative;flex:none}
+.orb::after{content:"";position:absolute;inset:7px;border-radius:50%;background:var(--accent);animation:pulse 3.2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35;transform:scale(.8)}}
+h1{font-size:20px;font-weight:600;letter-spacing:.2px}
+h1 small{color:var(--muted);font-weight:400;font-size:14px;margin-left:6px}
+h2{font-size:15px;font-weight:600}
+.spacer{flex:1}
+button{font:inherit;color:inherit;cursor:pointer}
+.ghost{background:none;border:1px solid var(--line);border-radius:10px;padding:6px 12px;color:var(--muted)}
+.ghost:hover,.ghost:focus-visible{color:var(--text);border-color:var(--accent);outline:none}
+#menu{display:none}
+#log{flex:1;overflow:auto;padding:20px;display:flex;flex-direction:column;gap:12px}
+.empty{margin:auto;text-align:center;color:var(--muted);max-width:30ch}
+.empty strong{display:block;color:var(--text);font-size:22px;font-weight:600;margin-bottom:6px}
+.msg{max-width:min(620px,86%);padding:10px 14px;border-radius:var(--radius);white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.me{align-self:flex-end;background:var(--me)}
+.msg.ai{align-self:flex-start;background:var(--panel);border:1px solid var(--line)}
+form{display:flex;gap:10px;padding:14px 20px 18px;border-top:1px solid var(--line)}
+textarea{flex:1;resize:none;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:var(--radius);padding:11px 14px;font:inherit;max-height:140px}
+textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
+.send{background:var(--accent);color:#0f1720;border:0;border-radius:var(--radius);padding:0 20px;font-weight:600}
+.send:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+#notes{list-style:none;padding:0;display:flex;flex-direction:column;gap:8px}
+#notes li{display:flex;gap:8px;align-items:flex-start;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font-size:14px}
+#notes li span{flex:1;overflow-wrap:anywhere}
+#notes button{background:none;border:0;color:var(--muted);padding:0 4px;font-size:18px;line-height:1}
+#notes button:hover{color:var(--text)}
+.hint{color:var(--muted);font-size:13px}
+.add{display:flex;gap:8px}
+.add input{flex:1;min-width:0;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit;font-size:14px}
+@media (max-width:760px){
+  .app{grid-template-columns:1fr}
+  aside{position:fixed;inset:0 20% 0 0;z-index:5;transform:translateX(-102%);transition:transform .2s;padding-top:calc(20px + env(safe-area-inset-top,0))}
+  aside.open{transform:none;box-shadow:0 0 0 100vmax rgba(0,0,0,.45)}
+  #menu{display:inline-block}
+}
+@media (prefers-reduced-motion:reduce){.orb::after{animation:none}aside{transition:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside id="side" aria-label="Gedächtnis">
+    <div style="display:flex;align-items:center"><h2>Gedächtnis</h2><span class="spacer"></span><button class="ghost" id="close" type="button">Schließen</button></div>
+    <p class="hint">Alles, was Jarvis über dich weiß. Es bleibt nur auf diesem Gerät gespeichert.</p>
+    <details id="conn"><summary class="hint" style="cursor:pointer">Verbindung (API-Schlüssel)</summary>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+        <input id="key" type="password" autocomplete="off" placeholder="API-Schlüssel einfügen" aria-label="API-Schlüssel" style="background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit;font-size:14px">
+        <select id="model" aria-label="Modell" style="background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit;font-size:14px">
+          <option value="gemini-2.5-flash">Google Gemini Flash (kostenloser Schlüssel)</option>
+          <option value="gemini-2.5-flash-lite">Google Gemini Flash-Lite (kostenlos, schneller)</option>
+          <option value="claude-haiku-5-5">Claude Haiku (bezahlt)</option>
+          <option value="claude-sonnet-5-5">Claude Sonnet (bezahlt)</option>
+        </select>
+        <button class="ghost" id="keySave" type="button">Speichern</button>
+        <p class="hint">Der Schlüssel bleibt nur auf diesem Gerät. Nie in die Datei oder auf GitHub schreiben.</p>
+      </div></details>
+    <div class="add"><input id="noteIn" placeholder="Neue Notiz" aria-label="Neue Notiz"><button class="ghost" id="noteAdd" type="button">Speichern</button></div>
+    <ul id="notes"></ul>
+    <p class="hint" id="noNotes">Noch nichts gespeichert. Schreib im Chat „Merke dir …“ oder füge hier eine Notiz hinzu.</p>
+  </aside>
+  <main>
+    <header>
+      <button class="ghost" id="menu" type="button">Gedächtnis</button>
+      <div class="orb" aria-hidden="true"></div>
+      <h1>Jarvis<small>2.0</small></h1>
+      <span class="spacer"></span>
+      <button class="ghost" id="clear" type="button">Chat leeren</button>
+    </header>
+    <div id="log" aria-live="polite"></div>
+    <form id="form">
+      <textarea id="in" rows="1" placeholder="Nachricht schreiben" aria-label="Nachricht"></textarea>
+      <button class="send" type="submit">Senden</button>
+    </form>
+  </main>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const store={
+  get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+};
+let chat=store.get('jarvis2:chat',[]), notes=store.get('jarvis2:notes',[]);
+
+function renderChat(){
+  const log=$('log'); log.innerHTML='';
+  if(!chat.length){
+    log.innerHTML='<div class="empty"><strong>Hallo.</strong>Schreib mir eine Nachricht. Mit „Merke dir …“ speichere ich etwas in deinem Gedächtnis.</div>';return;
+  }
+  chat.forEach(m=>{const d=document.createElement('div');d.className='msg '+m.r;d.textContent=m.t;log.appendChild(d)});
+  log.scrollTop=log.scrollHeight;
+}
+function renderNotes(){
+  const ul=$('notes'); ul.innerHTML='';
+  notes.forEach((n,i)=>{
+    const li=document.createElement('li'),s=document.createElement('span'),b=document.createElement('button');
+    s.textContent=n; b.textContent='×'; b.setAttribute('aria-label','Notiz löschen');
+    b.onclick=()=>{notes.splice(i,1);store.set('jarvis2:notes',notes);renderNotes()};
+    li.append(s,b); ul.appendChild(li);
+  });
+  $('noNotes').style.display=notes.length?'none':'block';
+}
+function addNote(t){t=t.trim();if(!t)return false;notes.push(t);store.set('jarvis2:notes',notes);renderNotes();return true}
+
+async function answer(text){
+  const m=text.match(/^merke dir[:,]?\s*(.+)/i);
+  if(m&&addNote(m[1])) return 'Gespeichert: „'+m[1].trim()+'“';
+  const model=store.get('jarvis2:model','gemini-2.5-flash'), claude=model.startsWith('claude');
+  const key=store.get('jarvis2:key:'+(claude?'claude':'gemini'),'');
+  if(!key) return 'Trag zuerst links unter „Verbindung“ deinen API-Schlüssel ein.';
+  const sys='Du bist Jarvis, der persönliche Assistent des Nutzers. Antworte auf Deutsch, klar und kurz.'
+    +(notes.length?'\nDas weißt du über den Nutzer:\n- '+notes.join('\n- '):'');
+  let msgs=chat.filter(c=>!c.tmp).slice(-20).map(c=>({role:c.r==='me'?'user':'assistant',content:c.t}));
+  while(msgs.length&&msgs[0].role!=='user')msgs.shift();
+  try{
+    let res,d;
+    if(claude){
+      res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{
+        'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model,max_tokens:1000,system:sys,messages:msgs})});
+      d=await res.json();
+      if(!res.ok) return 'Fehler: '+(d.error&&d.error.message||res.status);
+      return d.content.filter(x=>x.type==='text').map(x=>x.text).join('\n');
+    }
+    res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent',{method:'POST',
+      headers:{'content-type':'application/json','x-goog-api-key':key},
+      body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},
+        contents:msgs.map(m=>({role:m.role==='user'?'user':'model',parts:[{text:m.content}]}))})});
+    d=await res.json();
+    if(!res.ok) return 'Fehler: '+(d.error&&d.error.message||res.status);
+    const parts=d.candidates&&d.candidates[0]&&d.candidates[0].content&&d.candidates[0].content.parts;
+    return parts?parts.map(x=>x.text||'').join('\n'):'Keine Antwort erhalten. Versuch es nochmal.';
+  }catch(e){return 'Keine Verbindung. Prüfe dein Internet und den Schlüssel.'}
+}
+
+$('form').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const t=$('in').value.trim(); if(!t)return;
+  $('in').value=''; $('in').style.height='auto';
+  chat.push({r:'me',t}); renderChat();
+  chat.push({r:'ai',t:'…',tmp:1}); renderChat();
+  const a=await answer(t);
+  chat=chat.filter(c=>!c.tmp);
+  chat.push({r:'ai',t:a}); store.set('jarvis2:chat',chat); renderChat();
+});
+$('in').addEventListener('input',e=>{e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px'});
+$('in').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&matchMedia('(hover:hover)').matches){e.preventDefault();$('form').requestSubmit()}});
+$('clear').onclick=()=>{chat=[];store.set('jarvis2:chat',chat);renderChat()};
+$('noteAdd').onclick=()=>{if(addNote($('noteIn').value))$('noteIn').value=''};
+$('noteIn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('noteAdd').click()}});
+$('menu').onclick=()=>$('side').classList.add('open');
+$('close').onclick=()=>$('side').classList.remove('open');
+const prov=()=>$('model').value.startsWith('claude')?'claude':'gemini';
+$('model').value=store.get('jarvis2:model','gemini-2.5-flash');
+$('key').value=store.get('jarvis2:key:'+prov(),'');
+$('model').onchange=()=>{$('key').value=store.get('jarvis2:key:'+prov(),'')};
+$('keySave').onclick=()=>{store.set('jarvis2:key:'+prov(),$('key').value.trim());store.set('jarvis2:model',$('model').value);$('conn').open=false};
+$('conn').open=!store.get('jarvis2:key:'+prov(),'');
+renderChat(); renderNotes();
+</script>
+</body>
+</html>
